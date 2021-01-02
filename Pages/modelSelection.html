@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+
+<body>
+  <script src="../Scripts/header.js"></script>
+<div class="grid-container">
+  <div class="model-selection-row">
+    <button id="single-server" class="model-selection-button">Single Server</button>
+    <button id="single-feedback" class="model-selection-button">Single Server with Feedback</button>
+    <button id = "two-servers" class="model-selection-button">Two Servers</button>
+  </div>
+  <div class = "model-selection-row"> 
+    <button id="workstations" class="model-selection-button">Interactive Workstations</button>
+    <button id="central-server" class="model-selection-button">Central Server</button>
+  </div>
+  
+</div class= "server-descriptions">
+  <button class="server-descriptions">Server Descriptions</button>
+<div>
+  <div class="description-block">
+    
+    <div>
+      <b>Single Server Model: </b> <br>
+      The single server model is the simplest of models. It consists of a single queue and a single processor.  Jobs arrive, are enqueued, processed at the server then exit the system. Adjustable parameters for this model are interarrival rate and distribution as well as server processing rate and distribution. This model could be representative of a drive through at a fast food restaurant: people arrive, enqueue, are serviced, and leave.
+    </div>
+
+    <div>
+      <br><br>
+      <b>Two Servers Model:</b> <br>
+      The two servers model expands upon the single server model by adding an additional server in parallel. This model consists of a single queue with two servers. Tasks from the queue are placed into the next available server for processing. Adjustable parameters for this model are interarrival rate and distribution as well as server processing rate and distribution for each of the two servers. This type of model could be experienced at barbershops, a customer checks in (is enqueued) then gets service from one of many potential barbers
+
+    </div>
+    <button class="description-button">Return to Model Selection</button>
+  </div>
+
+</div>
+<script src="../Scripts/modelSelection.js"></script>
+</body>
+</html>
