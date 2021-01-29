@@ -55,7 +55,8 @@ function printDebugResults(){
 }
 function printResults(){
     //titleLocation.innerHTML = currentSimulation.getTitle();
-    resultsLocation.innerHTML = currentSimulation.getUserData();
+    //resultsLocation.innerHTML = currentSimulation.getUserData();
+    resultsLocation.innerHTML = currentSimulation.displayResultsByType();
 }
 
 /************************************************

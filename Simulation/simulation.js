@@ -74,6 +74,22 @@ class Model{
         //Organization for user output
         this.compByType = {};
     }
+    displayResults(){
+        for(const key in this.components){
+            this.components[key].userHeadingsToTable();
+            this.components[key].userDataToTable();
+        }
+    }
+    displayResultsByType(){
+        var output = "";
+        for(const key in this.compByType){
+            output += this.compByType[key][0].userHeadingsToTable();
+            for(var i = 0; i < this.compByType[key].length; i++){
+                output += this.compByType[key][i].userDataToTable();
+            }
+        }
+        return output;
+    }
     userHeadingsToTable(){
         return generateTableHeadings(this.userHeadings);
     }
@@ -83,7 +99,9 @@ class Model{
             return generateTableData(this.userData);
         else
             console.log("User data for: " + this.identifier + " is undefined");
+        return "";
     }
+    
     updateUserData(){
         this.responseTime = cumulativeResponseTime / tasksCompleted;
         this.throughput = tasksCompleted / currentTime;
@@ -260,7 +278,11 @@ class SimulationComponent {
         console.log("Update undefined for: " + this.identifier);
     }
     userHeadingsToTable(){
-        return generateTableHeadings(this.userHeadings);
+        if(this.userHeadings !== undefined)
+            return generateTableHeadings(this.userHeadings);
+        else 
+            console.log("User headings for: " + this.identifier + " is undefined");
+        return "";
     }
     userDataToTable(){
         this.updateUserData();
@@ -268,6 +290,7 @@ class SimulationComponent {
             return generateTableData(this.userData);
         else
             console.log("User data for: " + this.identifier + " is undefined");
+        return "";
     }
 
     setNext(component){
@@ -303,7 +326,7 @@ class QueueComponent extends SimulationComponent{
         this.averageQueueLength = 0;
         this.weightedQueueSize = 0;
         this.timeLastAdvance = 0;
-
+        this.timeLastUpdate = 0;
         this.userHeadings = ["ID", "Tasks", "Average Tasks"];
         this.userData = [this.identifier, this.numberTasks, this.averageQueueLength];
     }
@@ -317,6 +340,9 @@ class QueueComponent extends SimulationComponent{
         this.tasks[task.identifier] = task;
         this.numberTasks++;
         
+        this.weightedQueueSize += (currentTime-this.timeLastUpdate)*this.numberTasks;
+        this.timeLastUpdate = currentTime;
+
         //if not available push to waiting
         if(!this.next.checkAvailability()){
             this.tasksWaiting.push(task);
@@ -335,7 +361,7 @@ class QueueComponent extends SimulationComponent{
         this.next.acceptTask(task);
     }
     advanceTask(task){ //Called by component that queue is linked to
-        this.weightedQueueSize += this.numberTasks * (currentTime - this.timeLastAdvance);
+        //this.weightedQueueSize += this.numberTasks * (currentTime - this.timeLastAdvance);
         this.timeLastAdvance = currentTime;
         this.removeTask(task);  
 
@@ -376,26 +402,24 @@ class ServiceComponent extends SimulationComponent{
         this.connectedQueue = null;
         this.available = true;
         
-        //Metrics Needed
-        this.timeUtilized = 0;
-        this.numberTasksProcessed = 0; 
-        this.totalServiceTime = 0; 
-
         //Metrics to Evaluate
         this.jobsServiced = 0;
-
+        this.timeUtilized = 0;
         this.utilization = 0;
-        this.utilizationDeviation = 0;
 
+        this.totalServiceTime = 0; 
         this.averageServiceTime = 0;
-        this.averageServiceTimeDeviation = 0;
+        this.serviceCumulativeDeviation = 0;
+        this.serviceTimeDeviation = 0;
 
+        this.lastGeneratedServiceTime = 0;
         //User Output
-        this.userHeadings = ["ID", "Utilization", "Service Time", "Tasks Serviced", "SD Utilization", "SD Service Time"];
-        this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced, this.utilizationDeviation, this.averageServiceTimeDeviation];
+        this.userHeadings = ["ID", "Utilization", "Service Time", "Tasks Serviced",  "SD Service Time"];
+        this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced,  this.averageServiceTimeDeviation];
     }
     updateUserData(){
-        this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced, this.utilizationDeviation, this.averageServiceTimeDeviation];
+        this.serviceTimeDeviation = Math.sqrt(this.serviceCumulativeDeviation/(this.jobsServiced) - this.averageServiceTime*this.averageServiceTime)
+        this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced, this.serviceTimeDeviation];
     }
     connectQueue(queue){
         this.connectedQueue = queue;
@@ -403,26 +427,29 @@ class ServiceComponent extends SimulationComponent{
     acceptTask(task){
         this.task = task;
         //Generate Random Service Time Based on Distribution
-        var randomServiceTime = this.distribution.generate();
-        this.totalServiceTime += randomServiceTime;
-        this.averageServiceTime = this.totalServiceTime / (this.jobsServiced + 1);
-        this.timeUtilized += randomServiceTime;
-        this.timeNextEvent = randomServiceTime + currentTime;
+        this.lastGeneratedServiceTime = this.distribution.generate();
+        this.timeNextEvent = this.lastGeneratedServiceTime + currentTime;
         this.available = false;
         this.model.addEvent(this);
 
         //Return Information Regarding Next Event for This Object
         return {"component": this.identifier, "time": this.timeNextEvent, "task": task};
     }
+    updateMetrics(){
+        this.totalServiceTime += this.lastGeneratedServiceTime;
+        this.averageServiceTime = this.totalServiceTime / (this.jobsServiced);
+        this.serviceCumulativeDeviation += this.lastGeneratedServiceTime*this.lastGeneratedServiceTime
+        this.utilization = this.timeUtilized / currentTime;   
+        this.averageResponseTime = this.totalServiceTime / this.jobsServiced;
+    }
     advanceTask(){
         //Move Task to Next Component
         var task = JSON.parse(JSON.stringify(this.task));
         if(this.next != null && this.next.available)
             this.next.acceptTask(this.task);
-        
+
         this.jobsServiced++;
-        this.utilization = this.timeUtilized / currentTime;
-        this.averageResponseTime = this.totalServiceTime / this.jobsServiced;
+        this.updateMetrics();
         
         this.available = true;
         this.timeNextEvent = null;
@@ -464,17 +491,19 @@ class ArrivalComponent extends SimulationComponent{
 
         //metrics needed
         this.interArrivalTime = 0;
+        
         this.totalInterArrivalTime = 0;
-
         this.averageInterArrivalTime = 0;
-        this.averageInterArrivalTimeDeviation = 0;
+        this.interArrivalCumulativeDeviation = 0;
+        this.interArrivalTimeDeviation = 0;
 
         //User Output
         this.userHeadings = ["ID", "Interarrival Time", "Jobs Arrived", "SD Interarrival Time"];
         this.userData = [this.identifier, this.averageInterArrivalTime, this.jobsArrived, this.averageInterArrivalTimeDeviation];
     }
     updateUserData(){
-        this.userData = [this.identifier, this.averageInterArrivalTime, this.jobsArrived, this.averageInterArrivalTimeDeviation];
+        this.interArrivalTimeDeviation = Math.sqrt(this.interArrivalCumulativeDeviation/this.jobsArrived - this.averageInterArrivalTime*this.averageInterArrivalTime);
+        this.userData = [this.identifier, this.averageInterArrivalTime, this.jobsArrived, this.interArrivalTimeDeviation];
     }
     generateNextArrival(){
         var generatedTime = this.distribution.generate();
@@ -482,7 +511,7 @@ class ArrivalComponent extends SimulationComponent{
         this.totalInterArrivalTime += generatedTime;
         this.jobsArrived += 1;
         this.averageInterArrivalTime = this.totalInterArrivalTime/(this.jobsArrived);
-        
+        this.interArrivalCumulativeDeviation += generatedTime*generatedTime;
         this.task = new Task(`Task ${this.jobsArrived}`, this.timeNextEvent);
         this.model.addEvent(this);
     }
@@ -520,7 +549,10 @@ class ExitComponent extends SimulationComponent{
         this.task = null;
     }
     updateUserData(){
-        //TAsKS LEAVING MAYBE?
+        return "";
+    }
+    updateUserHeadings(){
+        return "";
     }
 }
 class FeedbackServer extends ServiceComponent{
@@ -575,10 +607,13 @@ class ParallelComponent extends SimulationComponent{
         this.model = model;
         this.placeAllObjects();
     }
+    userHeadingsToTable(){
+        return this.containedElements[0].userHeadingsToTable();
+    }
     userDataToTable(){
         var output = "";
-        for(const key in this.containedElements){
-            output += this.containedElements[key].userDataToTable();
+        for(const key in this.objectIndices){
+           output += this.objectIndices[key].userDataToTable();
         }
         return output;
     }

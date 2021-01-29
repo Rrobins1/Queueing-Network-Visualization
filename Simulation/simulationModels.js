@@ -49,6 +49,19 @@ class SingleServerModel extends Model{
         //Set Initial Point
         arrivalComponent.generateNextArrival();
     }
+    displayResults(){
+        this.userHeadingsToTable();
+        this.userDataToTable();
+
+        this.components["Arrivals"].userHeadingsToTable();
+        this.components["Arrivals"].userDataToTable();
+
+        this.components["Server"].userHeadingsToTable();
+        this.components["Server"].userDataToTable();
+
+        this.components["Queue"].userHeadingsToTable();
+        this.components["Queue"].userDataToTable();
+    }
 }
 class TwoServersModel extends Model{
     constructor(arrivalDistribution, serverDistributions){

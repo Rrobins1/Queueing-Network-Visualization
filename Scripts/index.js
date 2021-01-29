@@ -74,6 +74,7 @@ function runSingleFeedback(){
   var arrivalType = getCookie("arrival-distribution-type");
   var serviceDistribution = getDistribution("server", serviceType);
   var arrivalDistribution = getDistribution("arrival", arrivalType);
+  var feedbackRate = getFloatCookie("feedback-return-rate");
   createSingleFeedback(arrivalDistribution, serviceDistribution, feedbackRate);
 }
 function runWorkstations(){
