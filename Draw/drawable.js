@@ -67,6 +67,9 @@ class DrawableObject {
         this.coordinates = temp;
         this.isReversed = true;
     }
+    checkAvailability(task){
+        return this.isAvailable;
+    }
 }
 DrawableObject.width = undefined;
 DrawableObject.height = undefined;
@@ -91,24 +94,38 @@ class TaskVisual extends DrawableObject{
         this.destination.y = coordinates.y;
         this.isMoving = true;
     }
-    draw(){
-        if(this.isMoving){
-            if (this.destination != this.coordinates && this.isMoving){
-                var dy = this.destination.y - this.coordinates.y;
-                var yDirection = dy == 0 ? 0 : dy > 0? 1 : -1;
-                this.coordinates.y += yDirection*this.movementRate;
+    move(){
+        if (this.destination != this.coordinates && this.isMoving){
+            var dy = this.destination.y - this.coordinates.y;
+            var yDirection = dy == 0 ? 0 : dy > 0 ? 1 : -1;
+            this.coordinates.y += yDirection*this.movementRate;
+            
+            dy = this.destination.y - this.coordinates.y;
+            if (dy * yDirection < 0){
+                this.coordinates.y = this.destination.y;
+            }
 
-                if(dy==0){
-                    var dx = this.destination.x - this.coordinates.x;
-                    var xDirection = dx == 0 ? 0 : dx > 0 ? 1 : -1;
-                    this.coordinates.x += xDirection*this.movementRate;
-                }
+            if(dy==0){
+                var dx = this.destination.x - this.coordinates.x;
+                var xDirection = dx == 0 ? 0 : dx > 0 ? 1 : -1;
+                this.coordinates.x += xDirection*this.movementRate;
 
-                if(dx == 0 && dy == 0){
-                    this.isMoving = false;
-                    this.arrive();
+                dx = this.destination.x - this.coordinates.x;
+                if (dx * xDirection < 0){
+                    this.coordinates.x = this.destination.x;
                 }
             }
+
+            if(dx == 0 && dy == 0){
+                this.isMoving = false;
+                this.arrive();
+            }
+        }
+    }
+
+    draw(){
+        if(this.isMoving){
+            this.move();
         }
    
         if (this.isMoving){
@@ -158,15 +175,16 @@ class QueueVisual extends DrawableObject{
     };
     
     receiveTask(task){
-        task.makeInvisible();
-
-        this.tasks[task.identifier] = {"assignedSlot": null, "task": task};
+        if(this.tasksWaiting[task.identifier] !== undefined)
+            task.makeInvisible();
+        
+        this.tasks[task.identifier] = {"assignedSlot": null, "task": task, "server": null};
 
         if (this.numberTasks  < numberSlotsInQueue) {
             this.queueSlots[this.numberTasks].acceptTask(task);
             this.tasks[task.identifier].assignedSlot = this.numberTasks;
 
-            if(this.next.isAvailable)
+            if(this.next.checkAvailability(task))
                 this.next.acceptTask(task);
             else
                 this.tasksWaiting.push(task);
@@ -180,37 +198,40 @@ class QueueVisual extends DrawableObject{
     advanceTask(task){ //moves task to next component if present, shifts visual for task in queue slots
         this.shiftQueueSlotTasks(task);
         this.numberTasks --;
-        while(this.next.isAvailable && this.tasksWaiting.length > 0){
-            this.next.acceptTask(this.tasksWaiting.shift());
-            this.numberTasks --;
+        if(this.next.isAvailable && this.tasksWaiting.length > 0){
+            var nextTask = this.tasksWaiting.shift();
+            this.next.acceptTask(nextTask);
         }
+       // delete this.tasks[task.identifier];
     }
 
     shiftQueueSlotTasks(task){
         //Shift the tasks over
         var currentTaskData = this.tasks[task.identifier];
+        var destination, origin;
+
         for(var i = currentTaskData.assignedSlot; i < numberSlotsInQueue - 1; i++){
-            var destination = this.queueSlots[i];
-            var origin = this.queueSlots[i+1];
-           
-            if(origin.task != null){
-                destination.task = origin.task;
+            origin = this.queueSlots[i + 1];
+            destination = this.queueSlots[i];
+            destination.task = (origin.task);
+
+            
+            if(destination.task !== null){
                 this.tasks[destination.task.identifier].assignedSlot = i;
-            } 
-            else{
-                destination.task = null;
             }
-        }
-        
+            origin.task = null;
+        }        
 
         //If any items in overflow add to last slot.
         if(this.taskOverflow.length > 0){
-            this.queueSlots[numberSlotsInQueue - 1] = this.taskOverflow.shift();
-            this.tasks[task.identifier].assignedSlot = numberSlotsInQueue - 1;
+            var overFlowTask = this.taskOverflow.shift();
+            this.tasks[overFlowTask.identifier].assignedSlot = numberSlotsInQueue - 1;
+            this.queueSlots[numberSlotsInQueue - 1].acceptTask(overFlowTask);
         }
 
         currentTaskData = null;
     }
+
     draw(){
         for (let i = 0; i < numberSlotsInQueue; i++){
             this.queueSlots[i].draw()
@@ -258,26 +279,44 @@ class ServerVisual extends DrawableObject{
         this.task = null;
         this.connectedComponent = null; 
         this.type = "Server";
+        this.parallelBlock = null;
+        this.immediatelyProcess = false;
+        this.backLog = {};
     }
     setConnection(drawableObject){
         this.connectedComponent = drawableObject;
     }
     acceptTask(task){
-        this.task = task;
         this.isAvailable = false;
-    }
-    
-    advanceTask(task){
-        if(this.next.isAvailable){
-            this.next.acceptTask(task);
-        }
-        this.task.setCoordinates(this.connections.end);
-        this.task.makeVisible();
-        this.task = null;
-        this.isAvailable = true;
+        this.task = task;
 
-        if(this.connectedComponent != null)
-            this.connectedComponent.advanceTask(task);
+        if(this.backLog[task.identifier] !== undefined){
+            this.advanceTask(task);
+            delete this.backLog[task.identifier];
+        }
+    }
+    receiveTask(task){};
+    advanceTask(task){
+        if(this.task !== task)
+            this.backLog[task.identifier] = task;
+        
+        else{
+            if(this.next.isAvailable){
+                this.next.acceptTask(task);
+            }
+            task.setCoordinates(this.connections.end);  
+
+            if(this.parallelBlock !== null){
+                this.parallelBlock.advanceTask(task);
+                task.setCoordinates(this.parallelBlock.connections.end);
+            }
+                
+            this.task = null;
+            this.isAvailable = true;
+            task.makeVisible();
+            if(this.connectedComponent != null)
+                this.connectedComponent.advanceTask(task);
+        }
     }
     
 
@@ -292,6 +331,47 @@ class ServerVisual extends DrawableObject{
 ServerVisual.width = serverRadius*2;
 ServerVisual.height = serverRadius*2;
 ServerVisual.type = "Server";
+
+class FeedbackServerVisual extends ServerVisual{
+    constructor(x,y,identifier){
+        super(x,y,identifier);
+        this.taskDestinations = {};
+    }
+    connectExit(exitPoint){
+        this.exitPoint = exitPoint;
+    }
+    setTaskDestination(task, destination){
+        console.log("accept: " + destination);
+        this.taskDestinations[task.identifier] = destination;
+    }
+    getTaskDestination(task){
+        return this.taskDestinations[task.identifier];
+    }
+    advanceTask(task){
+        if(this.task !== task)
+            this.backLog[task.identifier] = task;
+        
+        else{
+            var destination = this.getTaskDestination(task);
+            console.log("advance: " + destination);
+            if(destination == "Exit"){
+                this.exitPoint.acceptTask(task);
+            }
+            else{
+                this.next.acceptTask(task);
+            }
+            task.setCoordinates(this.connections.end);  
+
+            this.task = null;
+            this.isAvailable = true;
+            task.makeVisible();
+            if(this.connectedComponent != null)
+                this.connectedComponent.advanceTask(task);
+            
+            delete this.taskDestinations[task.identifier];
+        }
+    }
+}
 //Workstation
 class WorkstationVisual extends DrawableObject{
     constructor(x,y, identifier){
@@ -299,26 +379,41 @@ class WorkstationVisual extends DrawableObject{
         this.connections.end.x = this.coordinates.x + workStationSize*2;
         this.task = null;
         this.type = "Workstation";
+        this.parallelBlock = null;
+        this.immediatelyProcess = false;
+        this.backLog = {};
     }
     setConnection(drawableObject){
         this.connectedComponent = drawableObject;
     }
     acceptTask(task){
-        this.task = task;
         this.isAvailable = false;
-    }
-    
-    advanceTask(task){
-        if(this.next.isAvailable){
-            this.next.acceptTask(task);
-        }
-        this.task.setCoordinates(this.connections.end);
-        this.task.makeVisible();
-        this.task = null;
-        this.isAvailable = true;
+        this.task = task;
 
-        if(this.connectedComponent != null)
-            this.connectedComponent.advanceTask(task);
+        if(this.backLog[task.identifier] !== undefined){
+            this.advanceTask(task);
+            delete this.backLog[task.identifier];
+        }
+    }
+    receiveTask(task){};    
+    advanceTask(task){
+        if(this.task !== task)
+            this.backLog[task.identifier] = task;
+        
+        else{
+            if(this.next.isAvailable){
+                this.next.acceptTask(task);
+            }
+            task.setCoordinates(this.connections.end);
+            task.setCoordinates(this.parallelBlock.connections.end);
+            task.makeVisible();
+
+            this.task = null;
+            this.isAvailable = true;
+
+            if(this.connectedComponent != null)
+                this.connectedComponent.advanceTask(task);
+        }
     }
     draw(){
         context.fillStyle = this.task == null? backgroundColor: this.task.color;
@@ -357,7 +452,7 @@ class DiskVisual extends DrawableObject{
         if(this.next.isAvailable){
             this.next.acceptTask(task);
         }
-        this.task.setCoordinates(this.connections.end);
+        this.task.setCoordinates(this.connections.end + horizontalSpacing);
         this.task.makeVisible();
         this.task = null;
         this.isAvailable = true;
@@ -403,23 +498,6 @@ class ExitPoint extends VisualAnchor{
 }
 
 
-//Parallel Connection 
-class ParallelConnection extends VisualAnchor{
-    constructor(){
-        var xStart = arguments[0].connections.start.x - parallelSpacingHorizontal;
-        var xEnd = arguments[0].connections.end.x + parallelSpacingHorizontal;
-        var yTop = arguments[0].connections.start.y;
-        var yBottom = arguments[arguments.length-1].connections.start.y;
-        var yCenter = yTop + (yBottom - yTop)/2;
-        super(xStart,yCenter);
-        this.connections.end.x = xEnd;
-        this.identifier = this.identifier + `_(${xEnd},${yCenter})`;
-    }
-    draw(){
-        
-    }
-}
-
 //Parallel Container
 class ParallelContainer extends DrawableObject{
     constructor(xStart, yCenter, identifier, objectType, numberOfElements){
@@ -431,6 +509,13 @@ class ParallelContainer extends DrawableObject{
         this.demandedTasks = [];
         this.createParallelObjects();
         this.connectedQueue = null;
+        this.tasks = {};
+    }
+    checkTask(taskIdentifier){
+        if(this.tasks[taskIdentifier] !== undefined)
+            return true;
+        else 
+            return false;
     }
     connectQueue(queue){
         this.connectedQueue = queue;
@@ -484,9 +569,11 @@ class ParallelContainer extends DrawableObject{
         //get first object y coordinate
         y -= (parallelSpacingVertical)*Math.floor( (this.numberOfElements - 1)/2 );
         for (var i = 0; i < this.numberOfElements; i++){
-            resultArray.push(new object(x,y, `${this.identifier}|${i}|${object.type}`));
+            resultArray.push(new object(x,y, `${this.identifier} `));
+            resultArray[i].identifier += resultArray[i].type + ` ${i}`;  
             y += parallelSpacingVertical;     
             this.objectIndices[resultArray[i].identifier] = resultArray[i];
+            resultArray[i].parallelBlock = this;
         }
     }
     setNext(drawableObject){
@@ -526,167 +613,22 @@ class ParallelContainer extends DrawableObject{
             });
         }
     }
+    placeTask(taskIdentifier, serverIdentifier){
+        var destination = this.objectIndices[serverIdentifier]
+        this.tasks[taskIdentifier] = destination;
+    }
     acceptTask(task){
-        var success = false;
-        for(var i = 0; i < this.containedElements.length; i++){
-            if(this.containedElements[i].isAvailable){
-                this.containedElements[i].acceptTask(task);
-                this.objectIndices[this.containedElements[i].identifier].task = task;
-                success = true;
-                i = this.containedElements.length;
-            }
-        }
-        if (!success){
-            this.demandedTasks.push(task);
-        }
+        var destination = this.tasks[task.identifier];
+        destination.acceptTask(task);
     }
-    advanceTask(serverIdentifier){
-        console.log(this.containedElements);
-        var server = this.objectIndices[serverIdentifier];
-        var task = server.task;
-        //advance the task in the server
-        
-        server.advanceTask(task);
-        task.coordinates.x = this.connections.end.x;
-        task.coordinates.y = this.connections.end.y;
-        
-        //get next available item if in overflow
-        if(this.demandedTasks.length > 0){
-            server.acceptTask(this.demandedTasks.shift());
-        }
+    advanceTask(task){
+        delete this.tasks[task.identifier];
     }
-    setTask(task, element){
-        
-
+    checkAvailability(task){
+        return this.checkTask(task.identifier);
     }
 }
 
-class ParallelContainerArrow extends DrawableObject{
-    constructor(xStart, yCenter, identifier, objectType, numberOfElements){
-        super(xStart, yCenter, identifier);
-        this.objectType = objectType;
-        this.numberOfElements = numberOfElements;
-        this.containedElements = [];
-        this.createParallelObjects();
-    }
-    connectInteriorObjects(){
-        for(var i = 0; i < this.containedElements.length - 1; i++){
-            for(var j = 0; j < this.containedElements[i].length; j++){
-                connectArrow(this.containedElements[i][j], this.containedElements[i+1][j]);
-            }
-
-        }
-    }
-    createParallelObjects(){
-        var objectWidth = this.findWidth(this.objectType);
-        var objectHeight = this.objectType.width;
-        this.connections.end.x = this.coordinates.x + 2*parallelSpacingHorizontal + objectWidth;
-        this.calculateWidth();
-        this.placeAllObjects();
-    }
-    placeAllObjects(){
-        var x = this.coordinates.x + parallelSpacingHorizontal;
-        var y = this.coordinates.y;
-        
-        if(!Array.isArray(this.objectType)){
-            this.placeObjects(x,y, this.objectType, this.containedElements);
-        }
-        else {
-            for(var i = 0; i < this.objectType.length; i++){
-                if(this.containedElements[i] === undefined){
-                    this.containedElements.push([]);
-                }
-                this.placeObjects(x, y, this.objectType[i], this.containedElements[i]);
-                x += this.objectType[i].width + horizontalSpacing;
-            }
-            this.objectType.forEach(element => {
-                
-            });
-        }
-    }
-    placeObjects(x, y, object, resultArray){
-        //if even offset y to center parallel components
-        if(this.numberOfElements % 2 === 0){
-            y -= parallelSpacingVertical/2;
-        }
-        //get first object y coordinate
-        y -= (parallelSpacingVertical)*Math.floor( (this.numberOfElements - 1)/2 );
-        for (var i = 0; i < this.numberOfElements; i++){
-            resultArray.push(new object(x,y, `${this.identifier}|${object}_${i}`));
-            y += parallelSpacingVertical;
-        }
-    }
-    findWidth(){
-        if (Array.isArray(this.objectType)){
-            var width = 0;
-            this.objectType.forEach(element => {
-                width += element.width;
-            });
-            return width + (this.objectType.length - 1) * horizontalSpacing;
-        }
-        else return this.objectType.width;
-    }
-    draw(){
-        if(Array.isArray(this.objectType)){
-            this.connectInteriorObjects();
-            drawParallelstart(...this.containedElements[0]);
-            this.containedElements.forEach(type => {
-                type.forEach(element => {
-                    element.draw();
-                });
-            });
-            drawParallelRight(...this.containedElements[this.containedElements.length-1]);
-        }
-        else{
-            drawParallelConnection(...this.containedElements);
-            this.containedElements.forEach(element => {
-                element.draw();
-            });
-        }
-    }
-}
-
-class OutputMerge extends DrawableObject{
-    constructor(xStart, yCenter, identifier){
-        super(xStart, yCenter, identifier);
-        this.triangleSize = 25;
-        
-        this.connections.end.x = xStart + this.triangleSize;
-        this.width = this.triangleSize;
-    }
-    draw(){
-        var pointLeft = this.connections.start.x;
-        var pointRight = this.connections.start.x + this.triangleSize;
-        context.fillStyle = connectionColor;
-        context.beginPath();
-        context.moveTo(pointLeft, this.coordinates.y);
-        context.lineTo(pointRight, this.coordinates.y + this.triangleSize);
-        context.lineTo(pointRight, this.coordinates.y - this.triangleSize);
-        context.fill();
-    }
-}
-
-class InputMerge extends DrawableObject{
-    constructor(xStart, yCenter, identifier){
-        super(xStart, yCenter, identifier);
-        this.triangleSize = 25; 
-        this.connections.end.x = xStart + this.triangleSize;
-        this.width = this.triangleSize;
-    }
-    draw(){
-        var pointLeft = this.connections.start.x;
-        var pointRight = this.connections.start.x + this.triangleSize;
-        context.fillStyle = connectionColor;
-        context.beginPath();
-        context.moveTo(pointRight, this.coordinates.y);
-        context.lineTo(pointLeft, this.coordinates.y + this.triangleSize);
-        context.lineTo(pointLeft, this.coordinates.y - this.triangleSize);
-        context.fill();
-    }
-}
-class ModularParallelContainer extends DrawableObject{
-    constructor(){}
-}
 
 var taskColorChoices = [
     "red", 
@@ -701,7 +643,7 @@ var taskColorChoices = [
 var colorIndex = 0;
 function generateColor(){
     var colorChoice = taskColorChoices[colorIndex];
-    colorIndex = (colorIndex + 1 % taskColorChoices.length);
+    colorIndex = ( (colorIndex + 1) % taskColorChoices.length);
     return colorChoice;
 
 }

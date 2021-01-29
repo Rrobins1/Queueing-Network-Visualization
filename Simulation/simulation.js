@@ -1,3 +1,23 @@
+function generateTable(tableHeadings, tableData){
+    var output = generateTableHeadings(tableHeadings);
+    output += generateTableData(tableData);
+    return output;
+}
+function generateTableHeadings(tableHeadings){
+    var output = "<tr>";
+    tableHeadings.forEach(element => {
+        output += `<th>${element}</th>`;
+    });
+    return output += "</tr>"
+}
+function generateTableData(tableData){
+    var output = "<tr>"
+    tableData.forEach(element => {
+        output += `<td>${element}</td>`;
+    });
+    return output += "</tr>";
+}
+
 var currentTime = 0;
 var tasksCompleted = 0;
 var cumulativeResponseTime = 0;
@@ -20,23 +40,6 @@ function setTime(time){
     currentTime = time;
 }
 
-document.head.innerHTML+=`<style>
-table {
-  font-family: arial, sans-serif;
-  border-collapse: collapse;
-  
-}
-
-td, th {
-  border: 2px solid #FFFFFF;
-  text-align: left;
-  padding: 8px;
-}
-
-tr:nth-child(even) {
-  background-color: #dddddd;
-}
-</style>`
 
 class Task{
     constructor(identifier, creationTime){
@@ -58,16 +61,42 @@ class Model{
         this.events = [];
         this.eventsProcessed = 0;
         this.visualModel = null;
-        
+        this.enableVisualization = true;
         //Results
         this.throughput = 0;
-        this.responseTime = 0;
-        this.sdvResponseTime = 0;
+        this.throughputDeviation = 0;
 
+        this.responseTime = 0;
+        this.responseTimeDeviation = 0;
+        
+        this.userHeadings = ["Identifier", "Tasks Completed", "Throughput", "Response Time", "Events Processed", "SD Throughput", "SD Response Time"];
+        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed, this.throughputDeviation, this.responseTimeDeviation];
+        //Organization for user output
+        this.compByType = {};
+    }
+    userHeadingsToTable(){
+        return generateTableHeadings(this.userHeadings);
+    }
+    userDataToTable(){
+        this.updateUserData();
+        if(this.userData !== undefined)
+            return generateTableData(this.userData);
+        else
+            console.log("User data for: " + this.identifier + " is undefined");
+    }
+    updateUserData(){
+        this.responseTime = cumulativeResponseTime / tasksCompleted;
+        this.throughput = tasksCompleted / currentTime;
+        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed, this.throughputDeviation, this.responseTimeDeviation];
     }
     addComponent(component){
         this.components[component.identifier] = component;
         component.model = this;
+
+        if(this.compByType[component.type] === undefined){
+            this.compByType[component.type] = [];
+        }
+        this.compByType[component.type].push(component);
     }
     setNext(first, second){
         first.setNext(second);
@@ -93,9 +122,8 @@ class Model{
     //runs the event
     processEvent(){
         var target = this.events.shift();
-
         //update visual component
-        if(this.visualModel != null){
+        if(this.enableVisualization){
             this.updateVisual(target);
         }
 
@@ -103,6 +131,11 @@ class Model{
         currentTime = target.timeNextEvent;
         target.advanceTask();
         this.eventsProcessed++;
+    }
+    getNextEventTime(){
+        if(this.events.length > 0)
+            return this.events[0].timeNextEvent;
+        else return null;
     }
     toTable(){
         var tableHeadings = ["ID", "Contained Events"];
@@ -129,22 +162,48 @@ class Model{
     }
     componentsToTable(){
         var output = "";
+        for(const key in this.components){
+            output += this.components[key].toTable();
+        }
+        /*
         this.components.forEach(component => {
             output += component.toTable();
         });
+        */
         return output;
     }
-    updateVisual(simulationObject){
-        var event = {
-            "identifier": simulationObject.identifier, 
-            "task": simulationObject.task.identifier, 
-            "time": simulationObject.timeNextEvent,
-            "function": (simulationObject.type == "arrival" ? "accept" : "advance")
-        };
-        this.visualModel.processEvent(event);
+    getUserData(){
+        var output = "";
+        for(const key in this.components){
+            output += this.components[key].userDataToTable();
+        }
+        return output;
     }
+    getTitle(){
+        return this.toTable();
+    }
+    getResults(){
+        return this.componentsToTable();
+    }
+    updateVisual(simulationObject){
+        var object, time, type, task;
+        //object = simulationObject.identifier;
+        time = simulationObject.timeNextEvent;
+        type = simulationObject.type == "arrival" ? "accept" : "advance";
+        task = simulationObject.task.identifier;
+        this.visualModel.createEvent(simulationObject,  time, type, task);
+    }
+    
     connectVisualModel(visualModel){
         this.visualModel = visualModel;
+        for (const key in this.components){
+            var component = this.components[key];
+            var visualComponent = visualModel.components[component.identifier];
+            if(visualComponent != undefined)
+                component.visual = visualComponent;
+            else
+                console.log("NO VISUAL ELEMENT FOR: " + component.identifier);
+        }
     }
     
 }
@@ -192,7 +251,25 @@ class SimulationComponent {
         this.available = true;
         this.task = null;
         this.timeNextEvent = null; //time at which next event is scheduled to occur for this object
+
+        //user output
+        this.userHeadings;
+        this.userData;
     }
+    updateUserData(){
+        console.log("Update undefined for: " + this.identifier);
+    }
+    userHeadingsToTable(){
+        return generateTableHeadings(this.userHeadings);
+    }
+    userDataToTable(){
+        this.updateUserData();
+        if(this.userData !== undefined)
+            return generateTableData(this.userData);
+        else
+            console.log("User data for: " + this.identifier + " is undefined");
+    }
+
     setNext(component){
         this.next = component;
     }
@@ -221,7 +298,21 @@ class QueueComponent extends SimulationComponent{
         this.tasks = {};
         this.tasksWaiting = [];
         this.numberTasks = 0;
+
+        //INFORMATION FOR RESULTS
+        this.averageQueueLength = 0;
+        this.weightedQueueSize = 0;
+        this.timeLastAdvance = 0;
+
+        this.userHeadings = ["ID", "Tasks", "Average Tasks"];
+        this.userData = [this.identifier, this.numberTasks, this.averageQueueLength];
     }
+    
+    updateUserData(){
+        this.averageQueueLength = this.weightedQueueSize / currentTime;
+        this.userData = [this.identifier, this.numberTasks, this.averageQueueLength];
+    }
+
     acceptTask(task){ //Receiving a new task
         this.tasks[task.identifier] = task;
         this.numberTasks++;
@@ -244,7 +335,10 @@ class QueueComponent extends SimulationComponent{
         this.next.acceptTask(task);
     }
     advanceTask(task){ //Called by component that queue is linked to
+        this.weightedQueueSize += this.numberTasks * (currentTime - this.timeLastAdvance);
+        this.timeLastAdvance = currentTime;
         this.removeTask(task);  
+
         if(this.tasksWaiting.length > 0 && this.next.checkAvailability()){
             this.next.acceptTask(this.tasksWaiting.shift());
         }
@@ -271,18 +365,7 @@ class QueueComponent extends SimulationComponent{
             tasks  += this.tasks[key].toString() + " | ";             
         }
         var tableData = [this.identifier, tasks];
-
-        var output = "<tr>";
-        tableHeadings.forEach(element => {
-            output += `<th>${element}</th>`;
-        });
-        output += "</tr><tr>"
-        tableData.forEach(element => {
-            output += `<td>${element}</td>`;
-        });
-        output += "</tr>";
-        
-        return output;
+        return generateTable(tableHeadings, tableData);
     }
 }
 
@@ -300,9 +383,19 @@ class ServiceComponent extends SimulationComponent{
 
         //Metrics to Evaluate
         this.jobsServiced = 0;
+
         this.utilization = 0;
+        this.utilizationDeviation = 0;
+
         this.averageServiceTime = 0;
-        this.sdvAverageServiceTime = 0;
+        this.averageServiceTimeDeviation = 0;
+
+        //User Output
+        this.userHeadings = ["ID", "Utilization", "Service Time", "Tasks Serviced", "SD Utilization", "SD Service Time"];
+        this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced, this.utilizationDeviation, this.averageServiceTimeDeviation];
+    }
+    updateUserData(){
+        this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced, this.utilizationDeviation, this.averageServiceTimeDeviation];
     }
     connectQueue(queue){
         this.connectedQueue = queue;
@@ -312,6 +405,7 @@ class ServiceComponent extends SimulationComponent{
         //Generate Random Service Time Based on Distribution
         var randomServiceTime = this.distribution.generate();
         this.totalServiceTime += randomServiceTime;
+        this.averageServiceTime = this.totalServiceTime / (this.jobsServiced + 1);
         this.timeUtilized += randomServiceTime;
         this.timeNextEvent = randomServiceTime + currentTime;
         this.available = false;
@@ -357,18 +451,7 @@ class ServiceComponent extends SimulationComponent{
     toTable(){
         var tableHeadings = ["ID", "Jobs", "Service Time", "Active Task", "Next Event", "Utilization"];
         var tableData = [this.identifier,this.jobsServiced, this.totalServiceTime/this.jobsServiced, this.task, this.timeNextEvent, this.utilization];
-
-        var output = "<tr>";
-        tableHeadings.forEach(element => {
-            output += `<th>${element}</th>`;
-        });
-        output += "</tr><tr>"
-        tableData.forEach(element => {
-            output += `<td>${element}</td>`;
-        });
-        output += "</tr>";
-        
-        return output;
+        return generateTable(tableHeadings, tableData);
     }
 }
 
@@ -382,16 +465,30 @@ class ArrivalComponent extends SimulationComponent{
         //metrics needed
         this.interArrivalTime = 0;
         this.totalInterArrivalTime = 0;
+
+        this.averageInterArrivalTime = 0;
+        this.averageInterArrivalTimeDeviation = 0;
+
+        //User Output
+        this.userHeadings = ["ID", "Interarrival Time", "Jobs Arrived", "SD Interarrival Time"];
+        this.userData = [this.identifier, this.averageInterArrivalTime, this.jobsArrived, this.averageInterArrivalTimeDeviation];
+    }
+    updateUserData(){
+        this.userData = [this.identifier, this.averageInterArrivalTime, this.jobsArrived, this.averageInterArrivalTimeDeviation];
     }
     generateNextArrival(){
         var generatedTime = this.distribution.generate();
         this.timeNextEvent += generatedTime; 
         this.totalInterArrivalTime += generatedTime;
         this.jobsArrived += 1;
+        this.averageInterArrivalTime = this.totalInterArrivalTime/(this.jobsArrived);
+        
+        this.task = new Task(`Task ${this.jobsArrived}`, this.timeNextEvent);
         this.model.addEvent(this);
     }
+
     advanceTask(){
-        this.next.acceptTask(new Task(`Task ${this.jobsArrived + 1}`, this.timeNextEvent));
+        this.next.acceptTask(new Task(`Task ${this.jobsArrived}`, this.timeNextEvent));
         this.generateNextArrival();
     }
     toString(){
@@ -405,18 +502,7 @@ class ArrivalComponent extends SimulationComponent{
     toTable(){
         var tableHeadings = ["ID", "Jobs", "Inter-Arrival Time", "Active Task", "Next Event"];
         var tableData = [this.identifier,this.jobsArrived, this.totalInterArrivalTime/this.jobsArrived, this.task, this.timeNextEvent];
-
-        var output = "<tr>";
-        tableHeadings.forEach(element => {
-            output += `<th>${element}</th>`;
-        });
-        output += "</tr><tr>"
-        tableData.forEach(element => {
-            output += `<td>${element}</td>`;
-        });
-        output += "</tr>";
-        
-        return output;
+        return generateTable(tableHeadings, tableData);
     }
 }
 
@@ -433,13 +519,18 @@ class ExitComponent extends SimulationComponent{
         tasksCompleted++;
         this.task = null;
     }
+    updateUserData(){
+        //TAsKS LEAVING MAYBE?
+    }
 }
 class FeedbackServer extends ServiceComponent{
     constructor(identifier, distribution, feedbackProbability){
         super(identifier, distribution);
-        this.feedbackProbability = feedbackProbability
+        this.feedbackProbability = feedbackProbability/100;
     }
-
+    connectExit(exitPoint){
+        this.exitPoint = exitPoint;
+    }
     advanceTask(){
         //Move Task to Next Component
         var task = JSON.parse(JSON.stringify(this.task));
@@ -448,10 +539,13 @@ class FeedbackServer extends ServiceComponent{
             var randomValue = Math.random();
             randomValue < this.feedbackProbability ? this.choseBelow++ : this.choseAbove++;
             if(randomValue < this.feedbackProbability){
+                this.visual.setTaskDestination(this.task, "Loop");
                 this.next.acceptTask(this.task);
                 this.tasksReturned++;
             }  
             else{
+                this.visual.setTaskDestination(this.task, "Exit");
+                this.exitPoint.acceptTask(this.task);
                 this.tasksExitted++;
             }
         }
@@ -477,10 +571,16 @@ class ParallelComponent extends SimulationComponent{
         this.containedElements = [];
         this.objectIndices = {};
         this.demandedTasks = [];
-        
         this.connectedQueue = null;
         this.model = model;
         this.placeAllObjects();
+    }
+    userDataToTable(){
+        var output = "";
+        for(const key in this.containedElements){
+            output += this.containedElements[key].userDataToTable();
+        }
+        return output;
     }
     connectQueue(queue){
         this.connectedQueue = queue;
@@ -560,7 +660,9 @@ class ParallelComponent extends SimulationComponent{
             var numberAvailable = availableComponents.length;
             var randomValue =  Math.floor(Math.random() * numberAvailable);
             availableComponents[randomValue].acceptTask(task);
-            this.objectIndices[availableComponents[randomValue].identifier].task = task;
+            var assignedComponent = this.objectIndices[availableComponents[randomValue].identifier];
+            assignedComponent.task = task;
+            this.visual.placeTask(task.identifier, assignedComponent.identifier);
         }
         if (!success){
             this.demandedTasks.push(task);
@@ -588,9 +690,10 @@ class ParallelComponent extends SimulationComponent{
 class WorkstationComponent extends ServiceComponent{
     constructor(identifier, distribution){
         super(identifier, distribution);
-        var workstationTask = new Task(this.identifier + "|task", currentTime);
+        var workstationTask = new Task(identifier + "|task", currentTime);
         this.assignedTask  = workstationTask;
         this.task = workstationTask;
+        this.type = "Workstation";
     }
     acceptTask(task){
         this.task = task;
@@ -620,10 +723,13 @@ class ParallelWorkstationComponent extends ParallelComponent{
     }
     setAssignedTasks(){
         this.containedElements.forEach(element => {
+            element.assignedTask.identifier = element.identifier + "|task";
             this.assignedTaskMapping[element.task.identifier] = element;  
-            var randomServiceTime = this.distribution.generate();
-            element.timeNextEvent = randomServiceTime;
-            this.model.addEvent(element);
+
+            element.acceptTask(element.assignedTask);
+            //var randomServiceTime = this.distribution.generate();
+            //element.timeNextEvent = randomServiceTime;
+            //this.model.addEvent(element);
         });
     }
     getServerFromTask(task){
@@ -633,7 +739,9 @@ class ParallelWorkstationComponent extends ParallelComponent{
         return true;
     }
     acceptTask(task){
-        this.getServerFromTask(task).acceptTask(task);
+        var workstation = this.getServerFromTask(task);
+        workstation.acceptTask(task);
+        this.visual.placeTask(task.identifier, workstation.identifier);
     }
 }
 function createVisualMessage(){

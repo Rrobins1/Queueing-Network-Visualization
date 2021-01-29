@@ -28,9 +28,6 @@ single.onclick = function(){
     singleServerModel.createEvent("Arrivals", 5*1000, "accept", "task 5");
     singleServerModel.createEvent("Arrivals", 6*1000, "accept", "task 6");
     
-    //singleServerModel.createEvent("Server", 4*1000, "advance", "task 1");
-
-   // singleServerModel.components["Arrivals"].acceptTask(singleServerModel.tasks["task 1"]);
     runModel(updateRate);
 }
 

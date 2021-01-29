@@ -28,7 +28,8 @@ class ModelVisual {
         this.timerRunning = false;
     }
     startTimer(){
-        this.intervalID = runModel(this);
+        if(this.intervalID == null)
+            this.intervalID = runModel(this);
     }
     stopTimer(){
         if(this.intervalID !== null){
@@ -38,6 +39,11 @@ class ModelVisual {
     }
     addComponent(visualObject){
         this.components[visualObject.identifier] = visualObject;
+        if(visualObject.containedElements !== undefined){
+            for(var i = 0; i < visualObject.containedElements.length; i++ ){
+                this.components[visualObject.containedElements[i].identifier] = visualObject.containedElements[i];
+            }
+        }
     }
     setNext(first, second){
         first.setNext(second);
@@ -65,15 +71,16 @@ class ModelVisual {
         delete this.tasks[task.identifier];
     }
     tickOnce(){
-        if(timeElapsed > 6000){
-            this.stopTimer();
-        }
-        if(this.timerRunning == false){
-            this.stopTimer();
-        }
+        //if(timeElapsed > 6000){
+          //  this.stopTimer();
+        //}
+        //if(this.timerRunning == false){
+          //  this.stopTimer();
+        //}
         timeElapsed += updateRate;
         if(this.events.length > 0){
             var event = this.events[0];
+            console.log(event);
             if(timeElapsed >= event.time){
                 if(event.type == "accept"){
                     event.object.acceptTask(event.task);
@@ -87,9 +94,9 @@ class ModelVisual {
         }
         this.draw();
     }
-    createEvent(objectIdentifier, time, eventType, taskIdentifier = null){
+    createEvent(simulationObject, time, eventType, taskIdentifier = null){
         var object, time, task = taskIdentifier;
-        object = this.components[objectIdentifier];
+        object = this.components[simulationObject.identifier];
         time = time;
         eventType = eventType;
         if(taskIdentifier != null){
@@ -105,10 +112,12 @@ class ModelVisual {
             "object": object,
             "time": time,
             "type": eventType,
-            "task": task
+            "task": task,
+            "simulationObject": simulationObject
         }
         this.addEvent(event);
     }
+    
     createVisualTask(taskIdentifier, initialObject){
         var x = initialObject.connections.start.x;
         var y = initialObject.connections.start.y;
@@ -180,9 +189,9 @@ class SingleFeedbackVisualModel extends ModelVisual{
         var drawY = 400;
         var offset = 15;
 
-        var serverOneQueue = new QueueVisual(drawX, drawY, "Server_1_Queue");
+        var serverOneQueue = new QueueVisual(drawX, drawY, "Queue");
         drawX += horizontalSpacing + QueueVisual.width;
-        var serverOne = new ServerVisual(drawX,drawY, "Server_1");
+        var serverOne = new FeedbackServerVisual(drawX,drawY, "Server");
        
         var boundaries = {
             "bottomRight" : new VisualAnchor( serverOne.connections.end.x + horizontalSpacing, serverOne.connections.end.y),
@@ -199,6 +208,23 @@ class SingleFeedbackVisualModel extends ModelVisual{
         //Add Components
         this.addComponent(serverOneQueue);
         this.addComponent(serverOne);
+        this.addComponent(entrance);
+        this.addComponent(boundaries.exitConnection);
+        serverOne.setConnection(serverOneQueue);
+
+        //Set Next
+        this.setNext(entrance, mergeBottom);
+        this.setNext(mergeBottom, serverOneQueue);
+        this.setNext(serverOneQueue, serverOne);
+        this.setNext(serverOne, boundaries.bottomRight);
+        serverOne.connectExit(boundaries.exitConnection);
+
+
+        this.setNext(boundaries.bottomRight, boundaries.topRight);
+        this.setNext(boundaries.topRight, boundaries.topLeft);
+        this.setNext(boundaries.topLeft, boundaries.bottomLeft);
+        this.setNext(boundaries.bottomLeft, mergeTop);
+        this.setNext(mergeTop, serverOneQueue);
 
         //Drawn Connections
         this.addDrawnConnection(boundaries["bottomRight"], arrowUp, connectArrow);
@@ -209,6 +235,7 @@ class SingleFeedbackVisualModel extends ModelVisual{
         this.addDrawnConnection(boundaries["bottomRight"], boundaries["topRight"], connectLine);
         this.addDrawnConnection(boundaries["topRight"], boundaries["topLeft"], connectLine);
         this.addDrawnConnection(boundaries["topLeft"], boundaries["bottomLeft"], connectLine);
+        this.addDrawnConnection(serverOne, boundaries["exitConnection"], connectArrow);
     }
 }
 
@@ -220,7 +247,7 @@ class TwoServersVisualModel extends ModelVisual{
 
         //Set up Components
         let queue = new QueueVisual(x1, y1, "Server_1_Queue");
-        let twoServers = new ParallelContainer(x1 + horizontalSpacing + QueueVisual.width, y1, "Two_Servers", ServerVisual, 2);
+        let twoServers = new ParallelContainer(x1 + horizontalSpacing + QueueVisual.width, y1, "Parallel", ServerVisual, 2);
         let entryPoint = new EntrancePoint(queue.connections.start.x - horizontalSpacing*2, y1, "Arrivals");
         let exitPoint = new ExitPoint(twoServers.connections.end.x + horizontalSpacing*2, y1);
     
@@ -234,7 +261,7 @@ class TwoServersVisualModel extends ModelVisual{
         this.setNext(entryPoint, queue);
         this.setNext(queue, twoServers);
         this.setNext(twoServers, exitPoint);
-        this.setNext(exitPoint, null);
+        //this.setNext(exitPoint, null);
         twoServers.connectQueue(queue);
 
         //Drawn Paths
@@ -273,7 +300,7 @@ class InteractiveVisualModel extends ModelVisual{
         
         //Main Components
         var workstationsParallel = new ParallelContainer(stationCoord.x, stationCoord.y, "Workstations", WorkstationVisual, numberWorkstations);
-        var serversQueue = new QueueVisual(queueCoord.x, queueCoord.y, "ParallelServersQueue");
+        var serversQueue = new QueueVisual(queueCoord.x, queueCoord.y, "Queue");
         var serversParallel = new ParallelContainer(serverCoord.x, serverCoord.y, "Servers", ServerVisual, numberServers);
     
 

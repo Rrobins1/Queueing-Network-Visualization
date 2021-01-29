@@ -4,7 +4,7 @@
   <link rel="stylesheet" href="../css/styles.css">
 </head>
 <body>
-  <script src="../Scripts/header.js"></script>
+  <button class="header">Queueing Network Animation System</button>
   
   <div class="runtime-block">
     <canvas id="window" class="screen"></canvas>
@@ -19,17 +19,17 @@
       <table id="resultsTable"> </table>
     </div>
   </div>
+
   
   
 </body>
-  <script src="../Scripts/runTime.js"></script>  
   <script src="../Draw/config.js"></script>
   <script src="../Draw/draw.js"></script> 
   <script src="../Draw/drawable.js"></script> 
-  <script src="../Draw/visualModels.js"></script>
+  <script src="../Draw/visualModels.js"></script>  
   <script src="../Simulation/simulation.js"></script>
   <script src="../Simulation/simulationModels.js"></script>
-  <script src="../Drivers/driver.js"></script>
-
-  <script src="../Scripts/index.js"></script>
+  <script src="driver.js"></script>
+  <script src="runtime.js"></script>
+  <script> initializeCanvas(); </script>
 </html>
