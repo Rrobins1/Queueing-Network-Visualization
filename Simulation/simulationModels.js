@@ -27,7 +27,7 @@ class Simulation{
 class SingleServerModel extends Model{
     constructor(arrivalDistribution, serverDistribution){
         super("Single Server");
-        
+    
         //Create Components For Model
         var arrivalComponent = new ArrivalComponent("Arrivals", arrivalDistribution);
         var queueComponent = new QueueComponent("Queue");
@@ -43,21 +43,21 @@ class SingleServerModel extends Model{
         //Link Components
         this.setNext(arrivalComponent, queueComponent);
         this.setNext(queueComponent, serverComponent);
-        this.connectQueue(queueComponent);
-        this.setNext(serverComponent, exitComponent);
+        serverComponent.connectQueue(queueComponent);
+        this.setNext(serverComponent, exitComponent); 
 
         //Set Initial Point
         arrivalComponent.generateNextArrival();
     }
 }
 class TwoServersModel extends Model{
-    constructor(arrivalDistribution, serverDistribution){
+    constructor(arrivalDistribution, serverDistributions){
         super("Two Servers");
 
         //Create Model Components
         var arrivalComponent = new ArrivalComponent("Arrivals", arrivalDistribution);
         var queueComponent = new QueueComponent("Queue");
-        var parallelServers = new ParallelComponent("Parallel", ServiceComponent, serversDistribution, 2, twoServersModel);
+        var parallelServers = new ParallelComponent("Parallel", ServiceComponent, serverDistributions, 2, this);
         var exitPoint = new ExitComponent("Exit");
         //Add to Model
         this.addComponent(arrivalComponent);
@@ -77,7 +77,7 @@ class TwoServersModel extends Model{
 }
 
 class SingleFeedbackModel extends Model{
-    constructor(){
+    constructor(arrivalDistribution, serverDistribution, feedbackProbability){
        super("Single Server (Feedback)");
         
        //Create Model Components
@@ -97,6 +97,7 @@ class SingleFeedbackModel extends Model{
        this.setNext(queueComponent, serverComponent);
        serverComponent.connectQueue(queueComponent);
        this.setNext(serverComponent, exitPoint); 
+       serverComponent.connectExit(exitPoint);
 
        //Initialize
        arrivalComponent.generateNextArrival();
@@ -107,12 +108,9 @@ class InteractiveModel extends Model{
     constructor( workstationDistribution, workstationCount, serverDistribution, serverCount){
         super("Interactive Workstations");
 
-        //Create Base Model
-        var interactiveModel = new Model("Interactive Workstations");
-        
         //Create Model Components
-        var parallelWorkstations = new ParallelWorkstationComponent("Workstations", workstationDistribution, workstationCount, interactiveModel);
-        var parallelServers = new ParallelComponent("Servers", ServiceComponent, serverDistribution, serverCount, interactiveModel);
+        var parallelWorkstations = new ParallelWorkstationComponent("Workstations", workstationDistribution, workstationCount, this);
+        var parallelServers = new ParallelComponent("Servers", ServiceComponent, serverDistribution, serverCount, this);
         var queueComponent = new QueueComponent("Queue");
         //Add to Model
         this.addComponent(parallelWorkstations);
@@ -124,6 +122,21 @@ class InteractiveModel extends Model{
         this.setNext(queueComponent, parallelServers);
         this.setNext(parallelServers, parallelWorkstations);
         parallelServers.connectQueue(queueComponent);
+    }
+
+    addInitialVisualEvents(){
+        if(this.visualModel === null || this.visualModel === undefined){
+            console.log("no visual model connected");
+        }
+        else{
+            var workstations = this.components["Workstations"].containedElements;
+
+            for(var i = 0; i < workstations.length; i++){
+                this.visualModel.createVisualTask(workstations[i].task.identifier, this.visualModel.components[workstations[i].identifier]);
+                var task = this.visualModel.tasks[workstations[i].task.identifier];
+                this.visualModel.components[workstations[i].identifier].acceptTask(task);
+            }  
+        }
     }
 }
 class CentralServerModel extends Model{

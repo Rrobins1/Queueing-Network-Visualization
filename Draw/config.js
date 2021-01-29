@@ -1,7 +1,6 @@
 //ANIMATION SPEED
-let taskMovementRate = 2;
+let taskMovementRate = 4;
 let updateRate = 1000/80;
-
 //CANVAS COMPONENTS
 let canvasWidth = 1500;
 let canvasHeight = 800;

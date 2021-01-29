@@ -332,3 +332,18 @@ body {
   background-color: rgb(202, 202, 202);
 }
 
+table {
+  font-family: arial, sans-serif;
+  border-collapse: collapse;
+  font-size: 12pt;
+}
+
+td, th {
+  border: 2px solid #FFFFFF;
+  text-align: left;
+  padding: 8px;
+}
+
+tr:nth-child(even) {
+  background-color: #a87300;
+}
