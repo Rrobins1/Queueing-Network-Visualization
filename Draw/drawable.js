@@ -13,7 +13,10 @@ class DrawableObject {
         this.isAvailable = true;
         this.isReversed = false;
     }
-
+    reset(){
+        this.isAvailable = true;
+        this.task = null;
+    }
     calculateWidth(){
         Math.abs(this.connections.end.x - this.connections.start.x);
     }
@@ -57,7 +60,7 @@ class DrawableObject {
         }
     }
     receiveTask(task){
-        if(this.next !== null)
+        //if(this.next !== null)
         this.advanceTask(task);
     }
     reverseDrawing(){
@@ -173,7 +176,15 @@ class QueueVisual extends DrawableObject{
             this.queueSlots.push(new QueueSlotVisual(this.coordinates.x + i * queueSlotSize, this.coordinates.y, `${this.identifier}_${i}`));
         }
     };
-    
+    reset(){
+        this.numberTasks = 0;
+        this.tasks = {};
+        this.taskOverFlow = [];
+        this.tasksWaiting = [];
+        for(var i = 0; i < this.queueSlots.length; i++){
+            this.queueSlots[i].task = null;
+        }
+    }
     receiveTask(task){
         if(this.tasksWaiting[task.identifier] !== undefined)
             task.makeInvisible();
@@ -225,8 +236,10 @@ class QueueVisual extends DrawableObject{
         //If any items in overflow add to last slot.
         if(this.taskOverflow.length > 0){
             var overFlowTask = this.taskOverflow.shift();
+            console.log(overFlowTask);
             this.tasks[overFlowTask.identifier].assignedSlot = numberSlotsInQueue - 1;
             this.queueSlots[numberSlotsInQueue - 1].acceptTask(overFlowTask);
+            this.tasksWaiting.push(overFlowTask);
         }
 
         currentTaskData = null;
@@ -283,6 +296,11 @@ class ServerVisual extends DrawableObject{
         this.immediatelyProcess = false;
         this.backLog = {};
     }
+    reset(){
+        this.task = null;
+        this.immediatelyProcess = false;
+        this.backLog = {};
+    }
     setConnection(drawableObject){
         this.connectedComponent = drawableObject;
     }
@@ -301,15 +319,18 @@ class ServerVisual extends DrawableObject{
             this.backLog[task.identifier] = task;
         
         else{
-            if(this.next.isAvailable){
-                this.next.acceptTask(task);
-            }
             task.setCoordinates(this.connections.end);  
 
             if(this.parallelBlock !== null){
                 this.parallelBlock.advanceTask(task);
                 task.setCoordinates(this.parallelBlock.connections.end);
             }
+            else{
+                if(this.next.isAvailable){
+                    this.next.acceptTask(task);
+                }
+            }
+
                 
             this.task = null;
             this.isAvailable = true;
@@ -335,6 +356,12 @@ ServerVisual.type = "Server";
 class FeedbackServerVisual extends ServerVisual{
     constructor(x,y,identifier){
         super(x,y,identifier);
+        this.taskDestinations = {};
+    }
+    reset(){
+        this.task = null;
+        this.immediatelyProcess = false;
+        this.backLog = {};
         this.taskDestinations = {};
     }
     connectExit(exitPoint){
@@ -380,6 +407,11 @@ class WorkstationVisual extends DrawableObject{
         this.task = null;
         this.type = "Workstation";
         this.parallelBlock = null;
+        this.immediatelyProcess = false;
+        this.backLog = {};
+    }
+    reset(){
+        this.task = null;
         this.immediatelyProcess = false;
         this.backLog = {};
     }
@@ -439,6 +471,9 @@ class DiskVisual extends DrawableObject{
         this.connections.end = {"x": x + diskRadius*2, "y": y};
         this.task = null;    
         this.type = "Disk";   
+    }
+    reset(){
+        this.task = null;
     }
     setConnection(drawableObject){
         this.connectedComponent = drawableObject;
@@ -509,6 +544,13 @@ class ParallelContainer extends DrawableObject{
         this.demandedTasks = [];
         this.createParallelObjects();
         this.connectedQueue = null;
+        this.tasks = {};
+    }
+    reset(){
+        for(var i = 0; i < this.containedElements.length; i++){
+            this.containedElements[i].reset();
+        }
+        this.demandedTasks = [];
         this.tasks = {};
     }
     checkTask(taskIdentifier){

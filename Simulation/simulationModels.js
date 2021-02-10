@@ -109,7 +109,7 @@ class SingleFeedbackModel extends Model{
        this.setNext(arrivalComponent, queueComponent);
        this.setNext(queueComponent, serverComponent);
        serverComponent.connectQueue(queueComponent);
-       this.setNext(serverComponent, exitPoint); 
+       this.setNext(serverComponent, queueComponent); 
        serverComponent.connectExit(exitPoint);
 
        //Initialize

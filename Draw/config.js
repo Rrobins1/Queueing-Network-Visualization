@@ -1,5 +1,5 @@
 //ANIMATION SPEED
-let taskMovementRate = 4;
+let taskMovementRate = 16;
 let updateRate = 1000/80;
 //CANVAS COMPONENTS
 let canvasWidth = 1500;
@@ -33,8 +33,10 @@ let queueSlotSize = 40;
 let horizontalSpacing = 75; //horizontal spacing 
 let verticalSpacing = 150; //vertical spacing
 let parallelSpacingHorizontal = 20; 
-let parallelSpacingVertical = 100;
+let parallelSpacingVertical = 70;
 
+//MAKE WORKSTATION CLOSER
+let parallelSpacingWorkstation = 60;
 //QUEUE SLOTS
 let numberSlotsInQueue = 6;
 

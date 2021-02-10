@@ -27,6 +27,16 @@ class ModelVisual {
         this.intervalID = null;
         this.timerRunning = false;
     }
+    reset(){
+        this.tasks = {};
+        this.events = [];
+        this.intervalID = null;
+        this.timerRunning = false;
+        for(const key in this.components){
+            this.components.reset();
+        }
+    }
+
     startTimer(){
         if(this.intervalID == null)
             this.intervalID = runModel(this);

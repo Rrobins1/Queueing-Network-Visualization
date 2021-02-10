@@ -21,6 +21,8 @@ function generateTableData(tableData){
 var currentTime = 0;
 var tasksCompleted = 0;
 var cumulativeResponseTime = 0;
+var responseTimeCumulativeDeviation = 0;
+var responseTimeDeviation = 0;
 
 function simulationToTable(){
     var generalHeadings = ["Current Time", "Tasks Completed", "Response Time"];
@@ -65,16 +67,33 @@ class Model{
         //Results
         this.throughput = 0;
         this.throughputDeviation = 0;
+        this.throughputCumulativeDeviation = 0;
 
         this.responseTime = 0;
         this.responseTimeDeviation = 0;
-        
-        this.userHeadings = ["Identifier", "Tasks Completed", "Throughput", "Response Time", "Events Processed", "SD Throughput", "SD Response Time"];
-        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed, this.throughputDeviation, this.responseTimeDeviation];
+        this.responseTimeCumulativeDeviation = 0;
+
+        this.userHeadings = ["Identifier", "Tasks Completed", "Throughput", "Response Time", "Events Processed",  "SD Response Time"];
+        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed,  this.responseTimeDeviation];
         //Organization for user output
         this.compByType = {};
     }
+    reset(){
+        this.events = [];
+        this.eventsProcessed = 0;
+        this.throughput= 0;
+        this.throughputDeviation= 0;
+        this.responseTime = 0;
+        this.responseTimeDeviation = 0;
+        this.userHeadings = ["Identifier", "Tasks Completed", "Throughput", "Response Time", "Events Processed", "SD Throughput", "SD Response Time"];
+        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed, this.throughputDeviation, this.responseTimeDeviation];
+        for(const key in this.components){
+            this.components[key].reset();
+        }
+    }
     displayResults(){
+        this.userHeadingsToTable();
+        this.userDataToTable();
         for(const key in this.components){
             this.components[key].userHeadingsToTable();
             this.components[key].userDataToTable();
@@ -82,6 +101,8 @@ class Model{
     }
     displayResultsByType(){
         var output = "";
+        output += this.userHeadingsToTable();
+        output += this.userDataToTable();
         for(const key in this.compByType){
             output += this.compByType[key][0].userHeadingsToTable();
             for(var i = 0; i < this.compByType[key].length; i++){
@@ -105,7 +126,8 @@ class Model{
     updateUserData(){
         this.responseTime = cumulativeResponseTime / tasksCompleted;
         this.throughput = tasksCompleted / currentTime;
-        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed, this.throughputDeviation, this.responseTimeDeviation];
+        this.responseTimeDeviation = Math.sqrt(responseTimeCumulativeDeviation/tasksCompleted - this.responseTime*this.responseTime);
+        this.userData = [this.identifier, tasksCompleted, this.throughput, this.responseTime, this.eventsProcessed, this.responseTimeDeviation];
     }
     addComponent(component){
         this.components[component.identifier] = component;
@@ -274,6 +296,11 @@ class SimulationComponent {
         this.userHeadings;
         this.userData;
     }
+    reset(){
+        this.task = null;
+        this.available = true;
+        this.timeNextEvent = null;
+    }
     updateUserData(){
         console.log("Update undefined for: " + this.identifier);
     }
@@ -413,6 +440,7 @@ class ServiceComponent extends SimulationComponent{
         this.serviceTimeDeviation = 0;
 
         this.lastGeneratedServiceTime = 0;
+        this.timeLastUpdate = 0;
         //User Output
         this.userHeadings = ["ID", "Utilization", "Service Time", "Tasks Serviced",  "SD Service Time"];
         this.userData = [this.identifier, this.utilization, this.averageServiceTime, this.jobsServiced,  this.averageServiceTimeDeviation];
@@ -439,7 +467,8 @@ class ServiceComponent extends SimulationComponent{
         this.totalServiceTime += this.lastGeneratedServiceTime;
         this.averageServiceTime = this.totalServiceTime / (this.jobsServiced);
         this.serviceCumulativeDeviation += this.lastGeneratedServiceTime*this.lastGeneratedServiceTime
-        this.utilization = this.timeUtilized / currentTime;   
+        
+        this.utilization = this.totalServiceTime / currentTime;   
         this.averageResponseTime = this.totalServiceTime / this.jobsServiced;
     }
     advanceTask(){
@@ -545,6 +574,7 @@ class ExitComponent extends SimulationComponent{
     }
     advanceTask(task){
         cumulativeResponseTime += task.getRunTime();
+        responseTimeCumulativeDeviation += task.getRunTime() * task.getRunTime();
         tasksCompleted++;
         this.task = null;
     }
@@ -555,6 +585,7 @@ class ExitComponent extends SimulationComponent{
         return "";
     }
 }
+
 class FeedbackServer extends ServiceComponent{
     constructor(identifier, distribution, feedbackProbability){
         super(identifier, distribution);
@@ -564,7 +595,6 @@ class FeedbackServer extends ServiceComponent{
         this.exitPoint = exitPoint;
     }
     advanceTask(){
-        //Move Task to Next Component
         var task = JSON.parse(JSON.stringify(this.task));
 
         if(this.next != null){
@@ -608,10 +638,11 @@ class ParallelComponent extends SimulationComponent{
         this.placeAllObjects();
     }
     userHeadingsToTable(){
-        return this.containedElements[0].userHeadingsToTable();
+        return "";//this.containedElements[0].userHeadingsToTable();
     }
     userDataToTable(){
         var output = "";
+        output += this.containedElements[0].userHeadingsToTable();
         for(const key in this.objectIndices){
            output += this.objectIndices[key].userDataToTable();
         }
@@ -729,14 +760,15 @@ class WorkstationComponent extends ServiceComponent{
         this.assignedTask  = workstationTask;
         this.task = workstationTask;
         this.type = "Workstation";
+        this.lastGeneratedServiceTime = 0;
+        this.userHeadings=["ID", "Utilization", "Think Time", "Tasks Submitted", "SD Think Time"];
     }
     acceptTask(task){
         this.task = task;
         //Generate Random Service Time Based on Distribution
-        var randomServiceTime = this.distribution.generate();
-        this.totalServiceTime += randomServiceTime;
-        this.timeUtilized += randomServiceTime;
-        this.timeNextEvent = randomServiceTime + currentTime;
+
+        this.lastGeneratedServiceTime = this.distribution.generate();
+        this.timeNextEvent = this.lastGeneratedServiceTime + currentTime;
         this.available = false;
         this.model.addEvent(this);
 

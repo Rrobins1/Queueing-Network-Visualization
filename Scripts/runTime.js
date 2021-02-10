@@ -22,4 +22,10 @@ helpButton.onclick = function(){
     window.location.href = "../Pages/modelConfiguration.html";
 }
 
+var resetButton = document.getElementById("resetButton");
+resetButton.onclick = function(){
+    stopModel();
+    resetModel();
+}
+
 

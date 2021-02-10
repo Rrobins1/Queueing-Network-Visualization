@@ -12,21 +12,32 @@ var currentModel = null;
 var currentSimulation = null;
 var lock = false;
 var timeNextEvent;
-
 var tempRate = 1;
 
-
+function resetModel(){
+    location.reload();
+}
+function stopModel(){
+    clearInterval(currentModel.intervalID);
+    currentModel.timerRunning = false;
+    currentModel.intervalID = null;
+}
 function createTimer(updateFunction, rate = updateRate){
     return setInterval(updateFunction, tempRate);
 }
-
+function singleEvent(){
+    currentSimulation.processEvent();
+}
 function runModel(rate = updateRate){
+    if(currentModel.timerRunning == true){
+        stopModel();
+    }
     currentModel.timerRunning = true;
     currentModel.intervalID = createTimer(tickModel, rate);
 }
 function tickModel(){
     timeNextEvent = currentSimulation.getNextEventTime();
-    if(timeNextEvent !== null && timeElapsed >= timeNextEvent*1000 && currentSimulation.eventsProcessed < 30){
+    if(timeNextEvent !== null && timeElapsed >= timeNextEvent*1000){
         currentSimulation.processEvent();
         console.log(currentModel.events[0].object.identifier + "|" + currentModel.events[0].task.identifier + "|" + currentModel.events[0].type);
         printResults();
@@ -54,8 +65,6 @@ function printDebugResults(){
     resultsLocation.innerHTML = currentSimulation.componentsToTable();
 }
 function printResults(){
-    //titleLocation.innerHTML = currentSimulation.getTitle();
-    //resultsLocation.innerHTML = currentSimulation.getUserData();
     resultsLocation.innerHTML = currentSimulation.displayResultsByType();
 }
 
